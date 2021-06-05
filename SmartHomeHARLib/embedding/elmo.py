@@ -589,7 +589,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         #backward_l1 = BatchNormalization()(backward_l1)
         backward_l2 = LSTM(emb_dim, 
         return_sequences=True, 
-        weights = backward_lstm_layer_1_weight, 
+        weights = backward_lstm_layer_2_weight, 
         #go_backwards=True, 
         trainable = False, 
         name="backward_lstm_layer_2"
@@ -704,7 +704,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         #backward_l1 = BatchNormalization()(backward_l1)
         backward_l2 = LSTM(emb_dim, 
                             return_sequences=True, 
-                            weights = backward_lstm_layer_1_weight, 
+                            weights = backward_lstm_layer_2_weight, 
                             #go_backwards=True, 
                             trainable = trainable, 
                             name="backward_lstm_layer_2"
