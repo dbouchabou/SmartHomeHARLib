@@ -204,3 +204,28 @@ class Dataset(SmartHomeDataset):
         self.df.activity = self.df.activity.map(dictActivities).astype(str)
 
         self._generateActivityList()
+    
+    def remove_temperature_sensors_values(self):
+
+        self.df = self.df[-self.df["sensor"].str.startswith('T')]
+        self.df = self.df.reset_index(drop = True)
+        
+
+    def keep_informative_days(self):
+        """
+        remove days that contains only the "Other" activity label from the df dataframe, because these days are short and informativeless
+
+        """
+
+        dofw, days = dataframe_day_window(self.df)
+
+        interesting_days = []
+
+        for i, day in enumerate(days):
+            
+            if len(day.activity.unique()) > 1 or day.activity.unique()[0] != "Other":
+                
+                interesting_days.append(day)
+
+        self.df = vertical_stack = pd.concat(interesting_days, axis=0)
+        self.df = self.df.reset_index(drop = True)
