@@ -1,12 +1,11 @@
 # !/usr/bin/env python3
 
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, LSTM, Bidirectional, Merge
-from tensorflow.keras.embeddings import Embedding
+from tensorflow.keras.layers import Dense, LSTM, Bidirectional, Concatenate, Embedding, Input
 from tensorflow.keras.models import Sequential
 
 
-def LSTM(vocab_size, nb_classes, output_dim=64, max_lenght=2000, mask_zero=True):
+def uniLSTM(vocab_size, nb_classes, output_dim=64, max_lenght=2000, mask_zero=True):
 
 	model = Sequential(name='Liciotti_LSTM')
 	model.add(Embedding(input_dim = vocab_size+1, output_dim = output_dim, input_length=max_lenght, mask_zero=mask_zero))
@@ -36,7 +35,8 @@ def ensemble2LSTM(vocab_size, nb_classes, output_dim=64, max_lenght=2000, mask_z
 	model2.add(LSTM(output_dim))
 
 	model = Sequential(name='Liciotti_Ensemble2LSTM')
-	model.add(Merge([model1, model2], mode='concat'))
+	#model.add(Merge([model1, model2], mode='concat'))
+	model.add(Concatenate([model1, model2]))
 	model.add(Dense(nb_classes, activation='softmax'))
 
 	return model
@@ -53,7 +53,8 @@ def cascadeEnsembleLSTM(vocab_size, nb_classes, output_dim=64, max_lenght=2000, 
 	model2.add(LSTM(output_dim, return_sequences=True))
 
 	model = Sequential(name='Liciotti_CascadeEnsembleLSTM')
-	model.add(Merge([model1, model2], mode='concat'))
+	#model.add(Merge([model1, model2], mode='concat'))
+	model.add(Concatenate([model1, model2]))
 	model.add(LSTM(output_dim))
 	model.add(Dense(nb_classes, activation='softmax'))
 
