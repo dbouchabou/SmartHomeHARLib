@@ -32,11 +32,21 @@ def create_padding_mask(seq):
 
     return att_mask  # (batch_size, seq_len, seq_len)
 
-def create_look_ahead_mask(size):
-
-    mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
-
-    return mask  # (seq_len, seq_len)
+def causal_attention_mask(batch_size, n_dest, n_src, dtype):
+    """
+    Mask the upper half of the dot product matrix in self attention.
+    This prevents flow of information from future tokens to current token.
+    1's in the lower triangle, counting from the lower right corner.
+    """
+    i = tf.range(n_dest)[:, None]
+    j = tf.range(n_src)
+    m = i >= j - n_src + n_dest
+    mask = tf.cast(m, dtype)
+    mask = tf.reshape(mask, [1, n_dest, n_src])
+    mult = tf.concat(
+        [tf.expand_dims(batch_size, -1), tf.constant([1, 1], dtype=tf.int32)], 0
+    )
+    return tf.tile(mask, mult)
 
 def get_angles(pos, i, d_model):
     angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model))
@@ -118,14 +128,71 @@ class TransformerBlock(layers.Layer):
         self.dropout1 = layers.Dropout(self.rate)
         self.dropout2 = layers.Dropout(self.rate)
 
-    def call(self, inputs, training, mask=None):
+    def call(self, inputs, mask=None):
         attn_output = self.att(inputs, inputs, attention_mask=mask)
-        attn_output = self.dropout1(attn_output, training=training)
+        attn_output = self.dropout1(attn_output)
         out1 = self.layernorm1(inputs + attn_output)
         ffn_output = self.ffn(out1)
-        ffn_output = self.dropout2(ffn_output, training=training)
+        ffn_output = self.dropout2(ffn_output)
         return self.layernorm2(out1 + ffn_output)
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'att': self.att,
+            'ffn': self.ffn,
+            'layernorm1': self.layernorm1,
+            'layernorm2': self.layernorm2,
+            'dropout1': self.dropout1,
+            'dropout2': self.dropout2,
+            'embed_dim': self.embed_dim,
+            'num_heads': self.num_heads,
+            'ff_dim': self.ff_dim,
+            'rate': self.rate,
+            'activation': self.activation
+        })
+        return config
+
+
+class GPTDecoder(layers.Layer):
+    def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1, activation="gelu", **kwargs):
+        super(GPTDecoder, self).__init__()
+
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.ff_dim = ff_dim
+        self.rate = rate
+        self.activation = activation
+
+        self.block = TransformerBlock(self.embed_dim, self.num_heads, self.ff_dim, self.rate, self.activation)
+
+       # self.att = layers.MultiHeadAttention(self.num_heads, self.embed_dim)
+        #self.ffn = keras.Sequential(
+        #    [layers.Dense(self.ff_dim, activation=self.activation), layers.Dense(self.embed_dim),]
+        #)
+        #self.layernorm1 = layers.LayerNormalization(epsilon=1e-6)
+        #self.layernorm2 = layers.LayerNormalization(epsilon=1e-6)
+        #self.dropout1 = layers.Dropout(self.rate)
+        #self.dropout2 = layers.Dropout(self.rate)
+
+    def call(self, inputs):
+        input_shape = tf.shape(inputs)
+        batch_size = input_shape[0]
+        seq_len = input_shape[1]
+        
+        causal_mask = causal_attention_mask(batch_size, seq_len, seq_len, tf.bool)
+        
+        out = self.block(inputs,causal_mask)
+
+        #attention_output = self.att(inputs, inputs, attention_mask=causal_mask)
+        #attention_output = self.dropout1(attention_output)
+        #out1 = self.layernorm1(inputs + attention_output)
+        #ffn_output = self.ffn(out1)
+        #ffn_output = self.dropout2(ffn_output)
+        #return self.layernorm2(out1 + ffn_output)
+
+        return out
+    
     def get_config(self):
         config = super().get_config()
         config.update({
