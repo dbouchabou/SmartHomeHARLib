@@ -1229,3 +1229,57 @@ class Encoder(DatasetEncoder):
 
         self.X = np.array([feature_1])
         self.X = self.X.transpose()
+
+    
+    def basic_raw_time_2(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_TIME_2"
+
+        # create event tokens
+        self.df["sinceMidnight"] = self.df['datetime'].dt.hour.astype(int) * 3600 + self.df['datetime'].dt.minute.astype(int) * 60 + self.df['datetime'].dt.second.astype(int)
+        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+
+        feature_1 = self.df["sinceMidnight"].values.astype(str)
+        feature_2 = self.df['merge'].values.astype(str)
+
+        x_tmp = []
+        y_tmp = []
+
+        for i in range(len(feature_1)):
+            x_tmp.append(feature_1[i])
+            x_tmp.append(feature_2[i])
+
+            # double the Y because the two features had the same label as they are part of the same event
+            y_tmp.append(self.Y[i])
+            y_tmp.append(self.Y[i])
+
+        self.X = np.array(x_tmp).astype(str)
+        self.Y = np.array(y_tmp).astype(int)
+
+
+    def basic_raw_time_encoded_2(self, custom_dict = None):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_TIME_ENCODED_2"
+
+        self.basic_raw_time_2()
+
+        # if no dict is provided, gerere a dict
+        if custom_dict == None:
+
+            sentence = " ".join(self.X)
+
+            tokenizer = Tokenizer(filters='', lower=False)
+            tokenizer.fit_on_texts([sentence])
+
+            wordDict = tokenizer.word_index
+        else:
+            wordDict = custom_dict
+
+        self.X = [wordDict[word] for word in self.X]
+
+        self.X = np.array(self.X).astype(int)
+
+        # save de word dictionary
+        self.eventDict = wordDict
