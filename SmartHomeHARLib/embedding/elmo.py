@@ -484,6 +484,55 @@ class ELMoEventEmbedder(BaseEmbedding):
 
 
         return model
+    
+    
+    def __model_5(self):
+
+        vocab_size = len(self.vocabulary)
+
+        forward_inputs = Input(shape=((None,)))
+        backward_inputs = Input(shape=((None,)))
+
+        embedding = Embedding(input_dim = vocab_size+1, output_dim = self.embedding_size, mask_zero=True, name="embedding_layer")
+
+        forward_inputs_embedded = embedding(forward_inputs)
+        backward_inputs_embedded = embedding(backward_inputs)
+
+        # forward
+        forward_l1 = LSTM(self.embedding_size, return_sequences=True, name="forward_lstm_layer_1") (forward_inputs_embedded)
+
+        if self.residual:
+            forward_l1 = Add(name="forward_residual")([forward_l1, forward_inputs_embedded])
+
+        #forward_l1 = BatchNormalization()(forward_l1)
+        forward_l2 = LSTM(self.embedding_size, return_sequences=False, name="forward_lstm_layer_2") (forward_l1)
+
+
+        # backward
+        backward_l1 = LSTM(self.embedding_size, 
+                            return_sequences=True, 
+                            #go_backwards=True, 
+                            name="backward_lstm_layer_1"
+        ) (backward_inputs_embedded)
+
+        if self.residual:
+            backward_l1 = Add(name="backward_residual")([backward_l1, backward_inputs_embedded])
+
+        #backward_l1 = BatchNormalization()(backward_l1)
+        backward_l2 = LSTM(self.embedding_size, 
+                            return_sequences=False, 
+                            #go_backwards=True, 
+                            name="backward_lstm_layer_2"
+        ) (backward_l1)
+
+        x = concatenate([forward_l2,backward_l2])
+
+        output = Dense(vocab_size, activation='softmax') (x)
+
+        model = Model(inputs=[forward_inputs,backward_inputs], outputs=output, name="ELMoLike")
+
+
+        return model
 
     def compile(self):
         self.model = self.__model_4()
@@ -504,7 +553,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         # print summary
         print(self.model.summary())
 
-    def train(self, best_model_path = None):
+    def train(self, best_model_path = None, patience = 20):
 
         if best_model_path != None:
             self.best_model_path = best_model_path
@@ -513,7 +562,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         #es = EarlyStopping(monitor = 'val_time_distributed_1_loss', mode = 'min', verbose = 1, patience = 20)
         #mc = ModelCheckpoint(best_model_path, monitor = 'val_time_distributed_1_sparse_categorical_accuracy', mode = 'max', verbose = 1, save_best_only = True)
 
-        es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = 20)
+        es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = patience)
         #mc = ModelCheckpoint(self.best_model_path, monitor = 'val_dense_sparse_categorical_accuracy', mode = 'max', verbose = 1, save_best_only = True)
         mc = ModelCheckpoint(self.best_model_path, monitor = 'val_perplexity', mode = 'min', verbose = 1, save_best_only = True)
         
@@ -734,6 +783,14 @@ class ELMoEventEmbedder(BaseEmbedding):
         elif embedding_type == "last":
 
             output = concatenate([forward_l2,backward_l2])
+        
+        elif embedding_type == "multi":
+
+            l0 = concatenate([embedding_layer, embedding_layer])
+            l1 = concatenate([forward_l1_lstm, backward_l1_lstm])
+            l2 = concatenate([forward_l2, backward_l2])
+
+            output = [l0, l1, l2]
 
 
         elmo_embedding = tf.keras.models.Model(inputs=sentence_inputs, outputs=output, name="ELMO_embedding")

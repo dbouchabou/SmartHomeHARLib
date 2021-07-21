@@ -1041,8 +1041,10 @@ class Encoder(DatasetEncoder):
 
         feature_1 = self.df['merge'].values.astype(str)
 
-        self.X = np.array([feature_1])
-        self.X = self.X.transpose()
+        #self.X = np.array([feature_1])
+        #self.X = self.X.transpose()
+        
+        self.X = np.array(feature_1)
 
 
     def basic_raw_encoded(self, custom_dict = None):
@@ -1071,8 +1073,10 @@ class Encoder(DatasetEncoder):
 
         feature_1 = self.df.merge_encoded.values.astype(int)
 
-        self.X = np.array([feature_1])
-        self.X = self.X.transpose()
+        #self.X = np.array([feature_1])
+        #self.X = self.X.transpose()
+        
+        self.X = np.array(feature_1)
 
         # save de word dictionary
         self.eventDict = wordDict
@@ -1234,13 +1238,21 @@ class Encoder(DatasetEncoder):
     def basic_raw_time_2(self):
 
         # set the encoding type
-        self.encodingType = "BASIC_RAW_TIME_2"
+        
+        #self.encodingType = "BASIC_RAW_TIME_SECONDS"
+        self.encodingType = "BASIC_RAW_TIME_MINUTES"
+        #self.encodingType = "BASIC_RAW_TIME_HOURS"
+
 
         # create event tokens
-        self.df["sinceMidnight"] = self.df['datetime'].dt.hour.astype(int) * 3600 + self.df['datetime'].dt.minute.astype(int) * 60 + self.df['datetime'].dt.second.astype(int)
+        #self.df["sinceMidnight"] = self.df['datetime'].dt.hour.astype(int) * 3600 + self.df['datetime'].dt.minute.astype(int) * 60 + self.df['datetime'].dt.second.astype(int)
+        self.df["minutesSinceMidnight"] = self.df['datetime'].dt.hour.astype(int) * 60 + self.df['datetime'].dt.minute.astype(int)
+        #self.df["hoursSinceMidnight"] = self.df['datetime'].dt.hour.astype(int)
         self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
 
-        feature_1 = self.df["sinceMidnight"].values.astype(str)
+        #feature_1 = self.df["sinceMidnight"].values.astype(str)
+        feature_1 = self.df["minutesSinceMidnight"].values.astype(str)
+        #feature_1 = self.df["hoursSinceMidnight"].values.astype(str)
         feature_2 = self.df['merge'].values.astype(str)
 
         x_tmp = []
@@ -1261,7 +1273,8 @@ class Encoder(DatasetEncoder):
     def basic_raw_time_encoded_2(self, custom_dict = None):
 
         # set the encoding type
-        self.encodingType = "BASIC_RAW_TIME_ENCODED_2"
+        #self.encodingType = "BASIC_RAW_TIME_SECONDS_ENCODED"
+        self.encodingType = "BASIC_RAW_TIME_MINUTES_ENCODED"
 
         self.basic_raw_time_2()
 
