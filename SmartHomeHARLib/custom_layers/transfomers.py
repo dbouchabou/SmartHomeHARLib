@@ -4,31 +4,24 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-def create_padding_mask(seq):
+def padding_attention_mask(seq):
 
     att_mask = []
-    seq_length = seq.shape[1]
-    with tqdm(total=seq.shape[0]+1, desc='Create padding mask') as pbar:
-        masks = tf.cast(tf.math.equal(seq, 0), tf.float32)
-        pbar.update(1)
 
-        masks = 1 - masks
+    seq_masks = tf.cast(tf.math.not_equal(seq, 0), tf.float32)
 
-        for m in masks:
-            am = np.ones((seq_length,seq_length))
+    for seq_mask in seq_masks:
 
-            m1 = np.expand_dims(m, axis=0)
-            m2 = np.expand_dims(m, axis=1)
+        basic_att_mask = tf.ones((seq_mask.shape[1],seq_mask.shape[1]))
 
+        # gerenrate de attention mask
+        att_seq_mask = basic_att_mask*seq_mask*tf.transpose(seq_mask)
 
-            am = am*m1
-            am = am*m2
-            att_mask.append(am)
+        # add atention mask of the sequence
+        att_mask.append(att_seq_mask)
 
-            pbar.update(1)
-
-
-    att_mask = np.array(att_mask)
+        # convert the mask to boolean
+        att_mask = tf.cast(att_mask, bool)
 
     return att_mask  # (batch_size, seq_len, seq_len)
 
