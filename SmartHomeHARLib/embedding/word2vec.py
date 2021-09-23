@@ -32,13 +32,16 @@ class Word2VecEventEmbedder(BaseEmbedding):
         else:
             method = 0
 
-        self.model = Word2Vec(self.sentences, size=self.embedding_size, window=self.window_size, min_count=1, workers=self.workers_number, iter = self.nb_epoch, sg = method, hs = self.hierarchic_softmax, negative = self.negative_sample)
+        self.model = Word2Vec(self.sentences, vector_size=self.embedding_size, window=self.window_size, min_count=1, workers=self.workers_number, epochs = self.nb_epoch, sg = method, hs = self.hierarchic_softmax, negative = self.negative_sample)
 
         # Get word vocabulary
-        self.vocabulary = self.model.wv.vocab
+        self.vocabulary = self.model.wv.key_to_index
 
         # Get vectors for all word in the vocabulary 
-        self.vectors = self.model[self.vocabulary]
+        self.vectors = self.model.wv[self.vocabulary]
+        #self.vectors = []
+        #for word in self.vocabulary:
+        #    self.vectors.append(self.model.wv[word])
 
 
     def get_vector_word(self, word):
@@ -121,7 +124,7 @@ class Word2VecEventEmbedder(BaseEmbedding):
 
     def most_similar(self, word, top_n = 10):
 
-        return self.model.most_similar(word, topn = top_n)
+        return self.model.wv.most_similar(word, topn = top_n)
 
 
     def save_model(self, model_name):
@@ -134,10 +137,13 @@ class Word2VecEventEmbedder(BaseEmbedding):
         self.model = Word2Vec.load(model_path)
 
         # Get word vocabulary
-        self.vocabulary = self.model.wv.vocab
+        self.vocabulary = self.model.wv.key_to_index
 
-        # Get vectors for all word in the vocabulary 
-        self.vectors = self.model[self.vocabulary]
+        # Get vectors for all word in the vocabulary
+        self.vectors = self.model.wv[self.vocabulary] 
+        #self.vectors = []
+        #for word in self.vocabulary:
+        #    self.vectors.append(self.model.wv[word])
 
         # get vectors lenght
         self.embedding_size = len(self.vectors[0])
