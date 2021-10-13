@@ -10,10 +10,9 @@ import re
 from SmartHomeHARLib.datasets.casas import Dataset
 from SmartHomeHARLib.utils.data_segmentation import *
 
-
 class Milan(Dataset):
 
-    def __init__(self, name, path_to_dataset=None, clean_mode="raw"):
+    def __init__(self, path_to_dataset=None, clean_mode="raw"):
 
         # If no specific path to dataset is given, use the default one
         if path_to_dataset == None:
@@ -21,7 +20,7 @@ class Milan(Dataset):
             path_to_dataset = current_file_directory+"/../original_datasets/CASAS/milan/data"
             path_to_dataset = os.path.normpath(path_to_dataset)
 
-        super().__init__("MILAN", path_to_dataset)
+        super().__init__("Milan", path_to_dataset)
 
         self.clean_mode = clean_mode
 

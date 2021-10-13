@@ -20,7 +20,7 @@ class Aruba(Dataset):
             path_to_dataset = current_file_directory+"/../original_datasets/CASAS/aruba/data"
             path_to_dataset = os.path.normpath(path_to_dataset)
 
-        super().__init__( "Aruba", path_to_dataset)
+        super().__init__("Aruba", path_to_dataset)
 
         self.clean_mode = clean_mode
 

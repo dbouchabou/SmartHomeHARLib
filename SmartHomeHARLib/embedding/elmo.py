@@ -4,6 +4,7 @@
 
 import os
 import json
+import random
 import numpy as np
 from tqdm import tqdm
 
@@ -127,7 +128,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         self.tokenizer.fit_on_texts(self.sentences)
 
         # replace words into sentences by their index token
-        self.sentences = np.array(self.tokenizer.texts_to_sequences(self.sentences))
+        self.sentences = np.array(self.tokenizer.texts_to_sequences(self.sentences),dtype=object)
 
         self.vocabulary = self.tokenizer.word_index
     
@@ -285,29 +286,31 @@ class ELMoEventEmbedder(BaseEmbedding):
         self.forward_outputs = []
 
         self.backward_inputs = []
- 
-        self.sentences = self.sentences
         
-        for sentence in self.sentences:
-        
-            for i in range(self.step,len(sentence)-1,self.step): 
+        with tqdm(total=len(self.sentences), desc='Prepare Sentences') as pbar:
 
-                if i-self.window_size < 0:
-                    f_inputs = sentence[:i]
-                else:
-                    f_inputs = sentence[i-self.window_size:i]
-                    
-                if i+self.step+self.window_size > len(sentence):
-                    b_inputs = sentence[i+self.step:]
-                else:
-                    b_inputs = sentence[i+self.step:i+self.step+self.window_size]
+            for sentence in self.sentences:
+            
+                for i in range(self.step,len(sentence)-1,self.step): 
 
-                word_to_predict_forward = sentence[i:i+self.step]
+                    if i-self.window_size < 0:
+                        f_inputs = sentence[:i]
+                    else:
+                        f_inputs = sentence[i-self.window_size:i]
+                        
+                    if i+self.step+self.window_size > len(sentence):
+                        b_inputs = sentence[i+self.step:]
+                    else:
+                        b_inputs = sentence[i+self.step:i+self.step+self.window_size]
 
-                self.forward_inputs.append(f_inputs)
-                # return the sequence
-                self.backward_inputs.append(b_inputs[::-1])
-                self.forward_outputs.append(word_to_predict_forward)
+                    word_to_predict_forward = sentence[i:i+self.step]
+
+                    self.forward_inputs.append(f_inputs)
+                    # return the sequence
+                    #self.backward_inputs.append(b_inputs[::-1])
+                    self.backward_inputs.append(b_inputs)
+                    self.forward_outputs.append(word_to_predict_forward)
+                pbar.update(1)
 
         
         self.forward_inputs = pad_sequences(self.forward_inputs, padding = 'post')
@@ -439,6 +442,55 @@ class ELMoEventEmbedder(BaseEmbedding):
 
     def __model_4(self):
 
+        vocab_size = len(self.vocabulary)+1
+
+        forward_inputs = Input(shape=((None,)))
+        backward_inputs = Input(shape=((None,)))
+
+        embedding = Embedding(input_dim = vocab_size, output_dim = self.embedding_size, mask_zero=True, name="embedding_layer")
+
+        forward_inputs_embedded = embedding(forward_inputs)
+        backward_inputs_embedded = embedding(backward_inputs)
+
+        # forward
+        forward_l1 = LSTM(self.embedding_size, return_sequences=True, name="forward_lstm_layer_1") (forward_inputs_embedded)
+
+        if self.residual:
+            forward_l1 = Add(name="forward_residual")([forward_l1, forward_inputs_embedded])
+
+        #forward_l1 = BatchNormalization()(forward_l1)
+        forward_l2 = LSTM(self.embedding_size, return_sequences=False, name="forward_lstm_layer_2") (forward_l1)
+
+
+        # backward
+        backward_l1 = LSTM(self.embedding_size, 
+                            return_sequences=True, 
+                            go_backwards=True, 
+                            name="backward_lstm_layer_1"
+        ) (backward_inputs_embedded)
+
+        if self.residual:
+            backward_l1 = Add(name="backward_residual")([backward_l1, backward_inputs_embedded])
+
+        #backward_l1 = BatchNormalization()(backward_l1)
+        backward_l2 = LSTM(self.embedding_size, 
+                            return_sequences=False, 
+                            go_backwards=True, 
+                            name="backward_lstm_layer_2"
+        ) (backward_l1)
+
+        x = concatenate([forward_l2,backward_l2])
+
+        output = Dense(vocab_size, activation='softmax') (x)
+
+        model = Model(inputs=[forward_inputs,backward_inputs], outputs=output, name="ELMoLike")
+
+
+        return model
+    
+    
+    def __model_5(self):
+
         vocab_size = len(self.vocabulary)
 
         forward_inputs = Input(shape=((None,)))
@@ -504,7 +556,8 @@ class ELMoEventEmbedder(BaseEmbedding):
         # print summary
         print(self.model.summary())
 
-    def train(self, best_model_path = None):
+
+    def train(self, best_model_path = None, patience = 20):
 
         if best_model_path != None:
             self.best_model_path = best_model_path
@@ -513,7 +566,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         #es = EarlyStopping(monitor = 'val_time_distributed_1_loss', mode = 'min', verbose = 1, patience = 20)
         #mc = ModelCheckpoint(best_model_path, monitor = 'val_time_distributed_1_sparse_categorical_accuracy', mode = 'max', verbose = 1, save_best_only = True)
 
-        es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = 20)
+        es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = patience)
         #mc = ModelCheckpoint(self.best_model_path, monitor = 'val_dense_sparse_categorical_accuracy', mode = 'max', verbose = 1, save_best_only = True)
         mc = ModelCheckpoint(self.best_model_path, monitor = 'val_perplexity', mode = 'min', verbose = 1, save_best_only = True)
         
@@ -539,6 +592,41 @@ class ELMoEventEmbedder(BaseEmbedding):
         #                shuffle=True
         #)
 
+        # edit for tensorflow since V 2.4
+
+        # Wrap data in Dataset objects.
+        #ds_size = self.forward_inputs.shape[0]
+        #dataset_data = tf.data.Dataset.from_tensor_slices((self.forward_inputs, self.backward_inputs))
+        #dataset_labels = tf.data.Dataset.from_tensor_slices(self.forward_outputs)
+        #all_data = tf.data.Dataset.zip((dataset_data, dataset_labels))
+
+
+        #all_data = tf.data.Dataset.from_tensor_slices(({"input_1": self.forward_inputs, "input_2": self.backward_inputs}, self.forward_outputs))
+
+        #print(all_data)
+        #input("Press Enter to continue...")
+
+        # Split in Train and Validation sets
+
+        #train_split=0.8
+        #shuffle_size=10000
+
+        #all_data = all_data.shuffle(shuffle_size, seed=7)
+
+        #train_data = all_data.take(round(ds_size*train_split))
+        #val_data = all_data.skip(round(ds_size*train_split))
+
+        #train_data,val_data = self.get_dataset_partitions_tf(ds = all_data, ds_size=ds_size, train_split=0.8, val_split=0.2, shuffle=True, shuffle_size=10000, seed=7)
+
+        # The batch size must now be set on the Dataset objects.
+        #train_data = train_data.batch(self.batch_size)
+        #val_data = val_data.batch(self.batch_size)
+
+        # Disable AutoShard.
+        #options = tf.data.Options()
+        #options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        #train_data = train_data.with_options(options)
+        #val_data = val_data.with_options(options)
 
         self.model.fit([self.forward_inputs, self.backward_inputs], 
                         self.forward_outputs, 
@@ -549,6 +637,13 @@ class ELMoEventEmbedder(BaseEmbedding):
                         validation_split=0.2, 
                         shuffle=True
         )
+
+        #self.model.fit(train_data, 
+        #                validation_data=val_data,
+        #                epochs = self.nb_epoch, 
+        #                verbose = self.verbose,
+        #                callbacks=cbs
+        #)
 
     def __elmo_model(self, model):
 
@@ -579,7 +674,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         backward_l1_lstm = LSTM(emb_dim, 
         return_sequences=True, 
         weights = backward_lstm_layer_1_weight, 
-        #go_backwards=True, 
+        go_backwards=True, 
         trainable = False, 
         name="backward_lstm_layer_1"
         ) (embedding_layer)
@@ -590,7 +685,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         backward_l2 = LSTM(emb_dim, 
         return_sequences=True, 
         weights = backward_lstm_layer_2_weight, 
-        #go_backwards=True, 
+        go_backwards=True, 
         trainable = False, 
         name="backward_lstm_layer_2"
         ) (backward_l1)
@@ -694,7 +789,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         backward_l1_lstm = LSTM(emb_dim, 
                                 return_sequences=True, 
                                 weights = backward_lstm_layer_1_weight, 
-                                #go_backwards=True, 
+                                go_backwards=True, 
                                 trainable = trainable, 
                                 name="backward_lstm_layer_1"
         ) (embedding_layer)
@@ -705,7 +800,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         backward_l2 = LSTM(emb_dim, 
                             return_sequences=True, 
                             weights = backward_lstm_layer_2_weight, 
-                            #go_backwards=True, 
+                            go_backwards=True, 
                             trainable = trainable, 
                             name="backward_lstm_layer_2"
         ) (backward_l1)
@@ -724,16 +819,33 @@ class ELMoEventEmbedder(BaseEmbedding):
 
             output = Add()([l0, l1, l2])
 
+        elif embedding_type == "global_avg_concat":
+
+            output = concatenate([embedding_layer, forward_l1_lstm, backward_l1_lstm, forward_l2, backward_l2])
+            output = GlobalAveragePooling1D()(output)
+
         elif embedding_type == "global":
 
             l2 = concatenate([forward_l2,backward_l2])
 
             output = GlobalAveragePooling1D()(l2)
-            #output = GlobalMaxPooling1D()(22)
+            #output = GlobalMaxPooling1D()(l2)
         
         elif embedding_type == "last":
 
             output = concatenate([forward_l2,backward_l2])
+        
+        elif embedding_type == "multi":       
+
+            l0 = concatenate([embedding_layer, embedding_layer])
+            l1 = concatenate([forward_l1_lstm, backward_l1_lstm])
+            l2 = concatenate([forward_l2, backward_l2])
+
+            output = [l0, l1, l2]
+
+        elif embedding_type == "multi_2":       
+
+            output = [embedding_layer, forward_l1_lstm, backward_l1_lstm, forward_l2, backward_l2]
 
 
         elmo_embedding = tf.keras.models.Model(inputs=sentence_inputs, outputs=output, name="ELMO_embedding")

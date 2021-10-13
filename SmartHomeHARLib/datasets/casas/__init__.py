@@ -4,3 +4,4 @@ from .casasEncoder import Encoder
 from .casasSegmentator import Segmentator
 from .casas_milan_dataset import Milan
 from .casas_aruba_dataset import Aruba
+from .casas_cairo_dataset import Cairo
