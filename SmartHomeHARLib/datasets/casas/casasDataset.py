@@ -28,13 +28,15 @@ class Dataset(SmartHomeDataset):
         print("Load dataset")
         # load the the raw file to a Pandas dataframe
         self.df = pd.read_csv(self.filepath + "/cleanedData", sep="\t", header=None,
-                              names=["datetime", "sensor", "value", "activity", "activityState"])
+                              names=["datetime", "sensor", "value", "activity", "activityState"],
+                              low_memory=False)
         self.df['datetime'] = pd.to_datetime(self.df["datetime"])
 
     def _annotate(self):
 
         df = pd.read_csv(self.filepath + "/cleanedData", sep="\t", header=None,
-                         names=["datetime", "sensor", "value", "activity", "activityState"])
+                         names=["datetime", "sensor", "value", "activity", "activityState"],
+                         low_memory=False)
 
         df.activity = df.activity.fillna("")
         df.activityState = df.activityState.fillna("")
@@ -101,7 +103,8 @@ class Dataset(SmartHomeDataset):
 
     def _cleanDataset(self):
         df = pd.read_csv(self.filename, sep="\s+", header=None,
-                         names=["date", "time", "sensor", "value", "activity", "activityState"])
+                         names=["date", "time", "sensor", "value", "activity", "activityState"],
+                         low_memory=False)
 
         df['datetime'] = pd.to_datetime(df["date"] + " " + df["time"])
         df = df.drop(columns=['date', 'time'])

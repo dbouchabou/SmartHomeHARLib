@@ -1031,57 +1031,6 @@ class Encoder(DatasetEncoder):
         self.eventDict = wordDict
 
 
-    def basic_raw(self):
-
-        # set the encoding type
-        self.encodingType = "BASIC_RAW"
-
-        # create event tokens
-        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
-
-        feature_1 = self.df['merge'].values.astype(str)
-
-        #self.X = np.array([feature_1])
-        #self.X = self.X.transpose()
-        
-        self.X = np.array(feature_1)
-
-
-    def basic_raw_encoded(self, custom_dict = None):
-
-        # set the encoding type
-        self.encodingType = "BASIC_RAW_ENCODED"
-
-        # create event tokens
-        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
-
-
-        if custom_dict == None:
-
-            sentence = " ".join(self.df['merge'].values)
-
-            tokenizer = Tokenizer(filters='', lower=False)
-            tokenizer.fit_on_texts([sentence])
-
-            wordDict = tokenizer.word_index
-        else:
-            wordDict = custom_dict
-
-        self.df['merge_encoded'] = self.df['merge'].values.astype(str)
-
-        _, self.df['merge_encoded'] = self._encodeColumn(self.df["merge_encoded"], wordDict)
-
-        feature_1 = self.df.merge_encoded.values.astype(int)
-
-        #self.X = np.array([feature_1])
-        #self.X = self.X.transpose()
-        
-        self.X = np.array(feature_1)
-
-        # save de word dictionary
-        self.eventDict = wordDict
-
-
     def basic_raw_time(self):
 
         # set the encoding type
@@ -1296,3 +1245,185 @@ class Encoder(DatasetEncoder):
 
         # save de word dictionary
         self.eventDict = wordDict
+
+
+
+
+    ########### ENCODDING VALIDATE ###########
+    def basic_raw(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW"
+
+        # create event tokens
+        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+
+        feature_1 = self.df['merge'].values.astype(str)
+
+        #self.X = np.array([feature_1])
+        #self.X = self.X.transpose()
+        
+        self.X = np.array(feature_1)
+
+
+    def basic_raw_encoded(self, custom_dict = None):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_ENCODED"
+
+        # create event tokens
+        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+
+
+        if custom_dict == None:
+
+            sentence = " ".join(self.df['merge'].values)
+
+            tokenizer = Tokenizer(filters='', lower=False)
+            tokenizer.fit_on_texts([sentence])
+
+            wordDict = tokenizer.word_index
+        else:
+            wordDict = custom_dict
+
+        self.df['merge_encoded'] = self.df['merge'].values.astype(str)
+
+        _, self.df['merge_encoded'] = self._encodeColumn(self.df["merge_encoded"], wordDict)
+
+        feature_1 = self.df.merge_encoded.values.astype(int)
+
+        #self.X = np.array([feature_1])
+        #self.X = self.X.transpose()
+        
+        self.X = np.array(feature_1)
+
+        # save de word dictionary
+        self.eventDict = wordDict
+
+
+    ########### TEST MUSIC BAR TIME ###########
+    
+    def basic_raw_and_time_minutes(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_AND_MINUTES"
+
+        # create event tokens
+        self.df["minutes_since_midnight"] = self.df['datetime'].dt.hour.astype(int) * 60 + self.df['datetime'].dt.minute.astype(int)
+        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+
+        self.df["minutes_since_midnight"] = self.df["minutes_since_midnight"].astype(str)+"min"
+        
+        feature_1 = self.df["minutes_since_midnight"].values.astype(str)
+        feature_2 = self.df['merge'].values.astype(str)
+
+        self.X = np.array([feature_1, feature_2])
+        self.X = self.X.transpose()
+    
+
+    def basic_raw_and_time_minutes_2(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_AND_MINUTES"
+
+        # create event tokens
+        self.df["minutes_since_midnight"] = self.df['datetime'].dt.hour.astype(int) * 60 + self.df['datetime'].dt.minute.astype(int)
+        #self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+        self.df["minutes_since_midnight"] = self.df["minutes_since_midnight"].astype(str)+"min"
+        
+        feature_1 = self.df["minutes_since_midnight"].values.astype(str)
+        feature_2 = self.df['sensor'].values.astype(str)
+        feature_3 = self.df['value'].values.astype(str)
+
+        self.X = np.array([feature_1, feature_2, feature_3])
+        self.X = self.X.transpose()
+
+    def basic_raw_and_time_minutes_3(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_AND_MINUTES"
+
+        # create event tokens
+        
+        feature_1 = self.df['sensor'].values.astype(str)
+        feature_2 = self.df['value'].values.astype(str)
+
+        self.X = np.array([feature_1, feature_2])
+        self.X = self.X.transpose()
+
+    
+    def basic_raw_and_time_minutes_4(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_AND_MINUTES"
+
+        # create event tokens
+        self.df["minutes_since_midnight"] = self.df['datetime'].dt.hour.astype(int) * 60 + self.df['datetime'].dt.minute.astype(int)
+        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+        
+        feature_1 = self.df["minutes_since_midnight"].values.astype(int)+1
+        feature_2 = self.df['merge'].values.astype(str)
+
+        self.X = np.array([feature_1, feature_2])
+        self.X = self.X.transpose()
+
+    
+    def basic_raw_not_merged(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_NOT_MERGED"
+        
+        feature_1 = self.df['sensor'].astype(str)
+        feature_2 = self.df['value'].astype(str)
+
+        self.X = np.array([feature_1, feature_2])
+        self.X = self.X.transpose()
+
+    
+    def basic_raw_all_merge(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_ALL_MERGE"
+
+        # create event tokens
+        self.df["minutes_since_midnight"] = self.df['datetime'].dt.hour.astype(int)
+        self.df['merge'] = self.df["minutes_since_midnight"].astype(str) + self.df['sensor'].astype(str) + self.df['value'].astype(str)
+
+        feature_1 = self.df['merge'].values.astype(str)
+
+        #self.X = np.array([feature_1])
+        #self.X = self.X.transpose()
+        
+        self.X = np.array(feature_1)
+
+    def basic_raw_and_time_hour(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_AND_MINUTES"
+
+        # create event tokens
+        self.df["minutes_since_midnight"] = self.df['datetime'].dt.hour.astype(int)
+        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+
+        self.df["minutes_since_midnight"] = self.df["minutes_since_midnight"].astype(str)+"h"
+        
+        feature_1 = self.df["minutes_since_midnight"].values.astype(str)
+        feature_2 = self.df['merge'].values.astype(str)
+
+        self.X = np.array([feature_1, feature_2])
+        self.X = self.X.transpose()
+
+    def basic_raw_and_time_hour_2(self):
+
+        # set the encoding type
+        self.encodingType = "BASIC_RAW_AND_MINUTES"
+
+        # create event tokens
+        self.df["hour_since_midnight"] = self.df['datetime'].dt.hour.astype(int)
+        self.df['merge'] = self.df['sensor'].astype(str) + self.df['value'].astype(str)
+        
+        feature_1 = self.df["hour_since_midnight"].values.astype(int)+1
+        feature_2 = self.df['merge'].values.astype(str)
+
+        self.X = np.array([feature_1, feature_2])
+        self.X = self.X.transpose()

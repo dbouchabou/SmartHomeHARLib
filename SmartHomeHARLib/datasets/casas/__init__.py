@@ -5,3 +5,6 @@ from .casasSegmentator import Segmentator
 from .casas_milan_dataset import Milan
 from .casas_aruba_dataset import Aruba
 from .casas_cairo_dataset import Cairo
+from .casas_hh101_dataset import HH101
+from .casas_hh102_dataset import HH102
+from .casas_hh103_dataset import HH103

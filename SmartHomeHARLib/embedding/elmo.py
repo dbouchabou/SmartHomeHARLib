@@ -86,6 +86,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         self.nb_epoch = nb_epoch
         self.batch_size = batch_size
         self.verbose = verbose
+        self.embedding_weights = []
 
         self.model = None
         self.vocabulary = []
@@ -103,7 +104,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         self.elmo_model = None
 
     
-    def tokenize(self, filter = '', lower = False ):
+    def tokenize(self, filter = '', lower = False , vocabulary_dict = None, oov_token = "<UNK>"):
         """
         Process and tokenize sentences
 
@@ -113,6 +114,12 @@ class ELMoEventEmbedder(BaseEmbedding):
             filters caracters (default is '')
         lower : boolean
             lower case words before tokenize them (default is False)
+        
+        vocabulary_dict : dict
+            extern vocabulary dictionary (default is None)
+
+        oov_token : str
+            out of vocabulary special token (default is <UNK>)
         
         """
 
@@ -124,8 +131,12 @@ class ELMoEventEmbedder(BaseEmbedding):
         # concatenate all sentences into one big sequence
         #self.sentences = [" ".join(self.sentences)]
 
-        self.tokenizer = Tokenizer(filters = filter, lower = lower)
+        self.tokenizer = Tokenizer(filters = filter, lower = lower, oov_token=oov_token)
         self.tokenizer.fit_on_texts(self.sentences)
+
+        # accept external vocabulary
+        if vocabulary_dict != None:
+            self.tokenizer.word_index = vocabulary_dict
 
         # replace words into sentences by their index token
         self.sentences = np.array(self.tokenizer.texts_to_sequences(self.sentences),dtype=object)
@@ -316,11 +327,11 @@ class ELMoEventEmbedder(BaseEmbedding):
         self.forward_inputs = pad_sequences(self.forward_inputs, padding = 'post')
         self.backward_inputs = pad_sequences(self.backward_inputs, padding = 'post')
 
-        self.forward_inputs = np.array(self.forward_inputs)
-        self.forward_outputs = np.array(self.forward_outputs)
+        self.forward_inputs = self.forward_inputs
+        self.forward_outputs = np.array(self.forward_outputs).astype(int)
 
-        self.backward_inputs = np.array(self.backward_inputs)
-        self.backward_outputs = np.array(self.backward_outputs)
+        self.backward_inputs = self.backward_inputs
+        self.backward_outputs = np.array(self.backward_outputs).astype(int)
 
 
     def __model(self):
@@ -446,8 +457,11 @@ class ELMoEventEmbedder(BaseEmbedding):
 
         forward_inputs = Input(shape=((None,)))
         backward_inputs = Input(shape=((None,)))
-
-        embedding = Embedding(input_dim = vocab_size, output_dim = self.embedding_size, mask_zero=True, name="embedding_layer")
+        
+        if self.embedding_weights != []:
+            embedding = Embedding(input_dim = vocab_size, output_dim = self.embedding_size, mask_zero=True, weights = [self.embedding_weights], trainable = False, name="embedding_layer")
+        else:
+            embedding = Embedding(input_dim = vocab_size, output_dim = self.embedding_size, mask_zero=True, name="embedding_layer")
 
         forward_inputs_embedded = embedding(forward_inputs)
         backward_inputs_embedded = embedding(backward_inputs)
@@ -536,13 +550,71 @@ class ELMoEventEmbedder(BaseEmbedding):
 
 
         return model
+    
+    def __model_6(self):
 
-    def compile(self):
-        self.model = self.__model_4()
+        vocab_size = len(self.vocabulary)+1
+
+        forward_inputs = Input(shape=((None,)))
+        backward_inputs = Input(shape=((None,)))
+        
+        if self.embedding_weights != []:
+            embedding = Embedding(input_dim = vocab_size, output_dim = self.embedding_size, mask_zero=True, weights = [self.embedding_weights], trainable = False, name="embedding_layer")
+        else:
+            embedding = Embedding(input_dim = vocab_size, output_dim = self.embedding_size, mask_zero=True, name="embedding_layer")
+
+        softmax = Dense(vocab_size, activation='softmax')
+
+        forward_inputs_embedded = embedding(forward_inputs)
+        backward_inputs_embedded = embedding(backward_inputs)
+
+        # forward
+        forward_l1 = LSTM(self.embedding_size, return_sequences=True, name="forward_lstm_layer_1") (forward_inputs_embedded)
+
+        if self.residual:
+            forward_l1 = Add(name="forward_residual")([forward_l1, forward_inputs_embedded])
+
+        #forward_l1 = BatchNormalization()(forward_l1)
+        forward_l2 = LSTM(self.embedding_size, return_sequences=False, name="forward_lstm_layer_2") (forward_l1)
 
 
-        picture_name = "ELMo_4.png"
-        picture_path = os.path.join("", picture_name)
+        # backward
+        backward_l1 = LSTM(self.embedding_size, 
+                            return_sequences=True, 
+                            go_backwards=True, 
+                            name="backward_lstm_layer_1"
+        ) (backward_inputs_embedded)
+
+        if self.residual:
+            backward_l1 = Add(name="backward_residual")([backward_l1, backward_inputs_embedded])
+
+        #backward_l1 = BatchNormalization()(backward_l1)
+        backward_l2 = LSTM(self.embedding_size, 
+                            return_sequences=False, 
+                            go_backwards=True, 
+                            name="backward_lstm_layer_2"
+        ) (backward_l1)
+
+        #x = concatenate([forward_l2,backward_l2])
+
+        forward_output = softmax (forward_l2)
+        backward_output = softmax (backward_l2)
+
+        model = Model(inputs=[forward_inputs,backward_inputs], outputs=[forward_output,backward_output], name="ELMoLike")
+
+        return model
+
+    def compile(self, embedding_weights= [], picture_path = None):
+
+        self.embedding_weights = embedding_weights
+
+        #self.model = self.__model_4()
+        self.model = self.__model_6()
+
+        if picture_path == None:
+            #picture_name = "ELMo_4.png"
+            picture_name = "ELMo_6.png"
+            picture_path = os.path.join("", picture_name)
 
         plot_model(self.model, show_shapes = True, to_file = picture_path)
 
@@ -557,7 +629,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         print(self.model.summary())
 
 
-    def train(self, best_model_path = None, patience = 20):
+    def train(self, best_model_path = None, patience = 20, log_dir = None, csv_path = None ):
 
         if best_model_path != None:
             self.best_model_path = best_model_path
@@ -568,9 +640,31 @@ class ELMoEventEmbedder(BaseEmbedding):
 
         es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = patience)
         #mc = ModelCheckpoint(self.best_model_path, monitor = 'val_dense_sparse_categorical_accuracy', mode = 'max', verbose = 1, save_best_only = True)
-        mc = ModelCheckpoint(self.best_model_path, monitor = 'val_perplexity', mode = 'min', verbose = 1, save_best_only = True)
+        #mc = ModelCheckpoint(self.best_model_path, monitor = 'val_perplexity', mode = 'min', verbose = 1, save_best_only = True)
+
+        #MODEL_6
+        mc = ModelCheckpoint(self.best_model_path, monitor = 'val_dense_perplexity', mode = 'min', verbose = 1, save_best_only = True)
         
-        cbs = [mc,es]
+        
+
+        if log_dir != None:
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+
+            # create a callback for the tensorboard
+            tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir)
+        
+        if csv_path != None:
+            csv_logger = CSVLogger(csv_path)
+
+        if log_dir != None and csv_path != None:
+            cbs = [mc,es, tensorboard_cb, csv_logger]
+        elif log_dir != None:
+            cbs = [mc,es, tensorboard_cb]
+        elif csv_path != None:
+            cbs = [mc,es, csv_logger]
+        else:
+            cbs = [mc,es]
 
         #self.model.fit([self.forward_inputs, self.backward_inputs], 
         #                [self.forward_outputs, self.backward_outputs], 
@@ -628,8 +722,20 @@ class ELMoEventEmbedder(BaseEmbedding):
         #train_data = train_data.with_options(options)
         #val_data = val_data.with_options(options)
 
+        #FOR MODEL 4
+        #self.model.fit([self.forward_inputs, self.backward_inputs], 
+        #                self.forward_outputs, 
+        #                epochs = self.nb_epoch,
+        #                batch_size=self.batch_size, 
+        #                verbose=self.verbose,
+        #                callbacks=cbs, 
+        #                validation_split=0.2, 
+        #                shuffle=True
+        #)
+
+        #FOR MODEL 6
         self.model.fit([self.forward_inputs, self.backward_inputs], 
-                        self.forward_outputs, 
+                        [self.forward_outputs, self.forward_outputs], 
                         epochs = self.nb_epoch,
                         batch_size=self.batch_size, 
                         verbose=self.verbose,
@@ -652,6 +758,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         sentence_inputs = Input(shape=((None,)))
 
         embedding_weight = model.get_layer("embedding_layer").get_weights()[0]
+        #embedding_weight = model.get_layer("w2V_embedding_layer").get_weights()[0]
         forward_lstm_layer_1_weight = model.get_layer("forward_lstm_layer_1").get_weights()
         backward_lstm_layer_1_weight = model.get_layer("backward_lstm_layer_1").get_weights()
         forward_lstm_layer_2_weight = model.get_layer("forward_lstm_layer_2").get_weights()
@@ -662,12 +769,22 @@ class ELMoEventEmbedder(BaseEmbedding):
         embedding_layer = Embedding(input_dim = vocab_size+1, output_dim = emb_dim, mask_zero = True, weights = [embedding_weight], trainable = False) (sentence_inputs)
 
         # forward
-        forward_l1_lstm = LSTM(emb_dim, return_sequences=True, weights = forward_lstm_layer_1_weight, trainable = False, name="forward_lstm_layer_1") (embedding_layer)
+        forward_l1_lstm = LSTM(emb_dim, 
+        return_sequences=True, 
+        weights = forward_lstm_layer_1_weight, 
+        trainable = False, 
+        name="forward_lstm_layer_1"
+        ) (embedding_layer)
 
         forward_l1 = Add(name="forward_residual")([forward_l1_lstm, embedding_layer])
 
         #forward_l1 = BatchNormalization()(forward_l1)
-        forward_l2 = LSTM(emb_dim, return_sequences=True, weights = forward_lstm_layer_2_weight, trainable = False, name="forward_lstm_layer_2") (forward_l1)
+        forward_l2 = LSTM(emb_dim, 
+        return_sequences=True, 
+        weights = forward_lstm_layer_2_weight, 
+        trainable = False, 
+        name="forward_lstm_layer_2"
+        ) (forward_l1)
 
 
         # backward
@@ -759,6 +876,7 @@ class ELMoEventEmbedder(BaseEmbedding):
         sentence_inputs = Input(shape=((None,)))
 
         embedding_weight = self.model.get_layer("embedding_layer").get_weights()[0]
+        #embedding_weight = self.model.get_layer("w2V_embedding_layer").get_weights()[0]
         forward_lstm_layer_1_weight = self.model.get_layer("forward_lstm_layer_1").get_weights()
         backward_lstm_layer_1_weight = self.model.get_layer("backward_lstm_layer_1").get_weights()
         forward_lstm_layer_2_weight = self.model.get_layer("forward_lstm_layer_2").get_weights()
@@ -846,6 +964,22 @@ class ELMoEventEmbedder(BaseEmbedding):
         elif embedding_type == "multi_2":       
 
             output = [embedding_layer, forward_l1_lstm, backward_l1_lstm, forward_l2, backward_l2]
+        
+        elif embedding_type == "multi_3":       
+
+            s1 = Dense(1)
+            s2 = Dense(1)
+            s3 = Dense(1)
+
+            l0 = concatenate([embedding_layer, embedding_layer])
+            l1 = concatenate([forward_l1_lstm, backward_l1_lstm])
+            l2 = concatenate([forward_l2, backward_l2])
+
+            l0_1 = s1(l0)
+            l1_1 = s2(l1)
+            l2_1 = s3(l2)
+
+            output = Add()([l0_1, l1_1, l2_1])
 
 
         elmo_embedding = tf.keras.models.Model(inputs=sentence_inputs, outputs=output, name="ELMO_embedding")
@@ -910,6 +1044,8 @@ class ELMoEventEmbedder(BaseEmbedding):
 
         # get vector size
         embedding_weight = self.model.get_layer("embedding_layer").get_weights()[0]
+        #embedding_weight = self.model.get_layer("w2V_embedding_layer").get_weights()[0]
+        
         self.embedding_size = len(embedding_weight[1])
 
         
